@@ -22,7 +22,8 @@ export interface Habit {
   specificDays?: number[]; // 0=Sun, 1=Mon, ..., 6=Sat
   targetValue: number; // e.g., 8
   unit: string; // e.g., 'glasses', 'mins', 'times', 'pages'
-  reminderTime?: string; // HH:mm format
+  reminderTime?: string; // Legacy HH:mm format
+  reminderTimes?: string[]; // Multiple reminder times per day (e.g., ['08:00', '14:00', '20:00'])
   reminderEnabled?: boolean;
   archived: boolean;
   createdAt: string;
@@ -41,7 +42,14 @@ export interface UserProfile {
   joinedAt: string;
   soundEnabled: boolean;
   notificationsEnabled: boolean;
+  batteryOptimizationIgnored?: boolean;
+  notificationChannelConfig?: {
+    dailyReminders: boolean;
+    eveningWrapup: boolean;
+    motivationBoost: boolean;
+  };
   adMobEnabled: boolean;
+  language?: 'en' | 'hi';
 }
 
 export interface Achievement {

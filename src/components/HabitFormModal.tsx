@@ -12,7 +12,9 @@ import {
   Award, 
   CheckCircle2,
   Clock,
-  Bell
+  Bell,
+  Plus,
+  Trash2
 } from 'lucide-react';
 
 interface HabitFormModalProps {
@@ -60,6 +62,7 @@ export const HabitFormModal: React.FC<HabitFormModalProps> = ({
   const [targetValue, setTargetValue] = useState(1);
   const [unit, setUnit] = useState('times');
   const [reminderTime, setReminderTime] = useState('08:00');
+  const [reminderTimes, setReminderTimes] = useState<string[]>(['08:00']);
   const [reminderEnabled, setReminderEnabled] = useState(true);
 
   useEffect(() => {
@@ -72,7 +75,11 @@ export const HabitFormModal: React.FC<HabitFormModalProps> = ({
       setFrequency(initialHabit.frequency);
       setTargetValue(initialHabit.targetValue);
       setUnit(initialHabit.unit);
-      setReminderTime(initialHabit.reminderTime || '08:00');
+      const initialTimes = initialHabit.reminderTimes && initialHabit.reminderTimes.length > 0
+        ? initialHabit.reminderTimes
+        : [initialHabit.reminderTime || '08:00'];
+      setReminderTimes(initialTimes);
+      setReminderTime(initialTimes[0] || '08:00');
       setReminderEnabled(initialHabit.reminderEnabled ?? true);
     } else {
       setTitle('');
@@ -83,12 +90,28 @@ export const HabitFormModal: React.FC<HabitFormModalProps> = ({
       setFrequency('daily');
       setTargetValue(8);
       setUnit('glasses');
+      setReminderTimes(['08:00']);
       setReminderTime('08:00');
       setReminderEnabled(true);
     }
   }, [initialHabit, isOpen]);
 
   if (!isOpen) return null;
+
+  const handleAddReminderTime = () => {
+    setReminderTimes([...reminderTimes, '12:00']);
+  };
+
+  const handleRemoveReminderTime = (index: number) => {
+    if (reminderTimes.length <= 1) return;
+    setReminderTimes(reminderTimes.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateReminderTime = (index: number, value: string) => {
+    const updated = [...reminderTimes];
+    updated[index] = value;
+    setReminderTimes(updated);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,7 +126,8 @@ export const HabitFormModal: React.FC<HabitFormModalProps> = ({
       frequency,
       targetValue: Number(targetValue) || 1,
       unit: unit.trim() || 'times',
-      reminderTime,
+      reminderTime: reminderTimes[0] || '08:00',
+      reminderTimes: reminderTimes,
       reminderEnabled,
     });
     onClose();
@@ -259,22 +283,16 @@ export const HabitFormModal: React.FC<HabitFormModalProps> = ({
           </div>
 
           {/* Smart Reminder Setup */}
-          <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700/60 flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <Bell className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <div>
-                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Daily Reminder Alert</span>
-                <span className="text-[11px] text-slate-500 dark:text-slate-400">Receive smart push reminder</span>
+          <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-700/60 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <Bell className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <div>
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Daily Reminder Alerts</span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">Custom daily push notifications</span>
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-center gap-3">
-              <input
-                type="time"
-                value={reminderTime}
-                onChange={e => setReminderTime(e.target.value)}
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-mono"
-              />
               <button
                 type="button"
                 onClick={() => setReminderEnabled(!reminderEnabled)}
@@ -289,6 +307,47 @@ export const HabitFormModal: React.FC<HabitFormModalProps> = ({
                 />
               </button>
             </div>
+
+            {reminderEnabled && (
+              <div className="space-y-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                    Scheduled Times (Multiple Reminders)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAddReminderTime}
+                    className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 hover:underline"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add Time Slot
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {reminderTimes.map((t, idx) => (
+                    <div key={idx} className="flex items-center gap-1.5 bg-white dark:bg-slate-900 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                      <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1" />
+                      <input
+                        type="time"
+                        value={t}
+                        onChange={e => handleUpdateReminderTime(idx, e.target.value)}
+                        className="bg-transparent text-xs font-mono text-slate-900 dark:text-white focus:outline-none flex-1"
+                      />
+                      {reminderTimes.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveReminderTime(idx)}
+                          className="p-1 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Submit buttons */}

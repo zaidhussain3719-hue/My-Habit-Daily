@@ -1,6 +1,8 @@
-import React from 'react';
-import { Habit, HabitLog } from '../types';
+import React, { useState } from 'react';
+import { Habit, HabitLog, UserProfile } from '../types';
 import { calculateHabitStreak } from '../services/storageService';
+import { exportHabitsToCSV, exportHabitsToPDF } from '../services/exportService';
+import { getTranslation, Language } from '../services/i18nService';
 import { 
   BarChart, 
   Bar, 
@@ -14,21 +16,41 @@ import {
   Pie, 
   Cell 
 } from 'recharts';
-import { BarChart3, TrendingUp, Flame, Trophy, Award, CheckCircle2, Target } from 'lucide-react';
+import { 
+  BarChart3, 
+  TrendingUp, 
+  Flame, 
+  Trophy, 
+  Award, 
+  CheckCircle2, 
+  Target, 
+  FileText, 
+  Download, 
+  Printer 
+} from 'lucide-react';
 
 interface AnalyticsViewProps {
   habits: Habit[];
+  userProfile: UserProfile;
+  language?: Language;
 }
 
-export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ habits }) => {
+export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ habits, userProfile, language = 'en' }) => {
+  const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
+
   const activeHabits = habits.filter(h => !h.archived);
 
-  // 1. Calculate Last 7 Days completion stats
-  const weeklyData = Array.from({ length: 7 }, (_, i) => {
+  // Timeframe length configuration
+  const daysCount = timeframe === 'daily' ? 7 : timeframe === 'weekly' ? 14 : 30;
+
+  // 1. Calculate completion stats based on timeframe
+  const chartData = Array.from({ length: daysCount }, (_, i) => {
     const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
+    d.setDate(d.getDate() - ((daysCount - 1) - i));
     const dStr = d.toISOString().split('T')[0];
-    const dayLabel = d.toLocaleDateString('en-US', { weekday: 'short' });
+    const dayLabel = daysCount <= 7 
+      ? d.toLocaleDateString('en-US', { weekday: 'short' })
+      : `${d.getMonth() + 1}/${d.getDate()}`;
 
     let count = 0;
     activeHabits.forEach(h => {
@@ -40,24 +62,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ habits }) => {
     return { day: dayLabel, completed: count, percent, date: dStr };
   });
 
-  // 2. Calculate Last 14 Days trend line
-  const trendData = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (13 - i));
-    const dStr = d.toISOString().split('T')[0];
-    const dayLabel = `${d.getMonth() + 1}/${d.getDate()}`;
-
-    let count = 0;
-    activeHabits.forEach(h => {
-      const log = h.logs[dStr];
-      if (log?.completed || (log?.count || 0) >= h.targetValue) count++;
-    });
-
-    const rate = activeHabits.length > 0 ? Math.round((count / activeHabits.length) * 100) : 0;
-    return { date: dayLabel, rate };
-  });
-
-  // 3. Category distribution
+  // 2. Category distribution
   const categoryCounts: Record<string, number> = {};
   activeHabits.forEach(h => {
     categoryCounts[h.category] = (categoryCounts[h.category] || 0) + 1;
@@ -78,25 +83,81 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ habits }) => {
     Object.values(h.logs).forEach((l: HabitLog) => {
       if (l.completed) totalCompletions++;
     });
-    const { currentStreak, bestStreak } = calculateHabitStreak(h);
+    const { bestStreak } = calculateHabitStreak(h);
     if (bestStreak > maxStreakAcrossHabits) maxStreakAcrossHabits = bestStreak;
   });
 
-  const averageWeeklyPercent = Math.round(
-    weeklyData.reduce((acc, curr) => acc + curr.percent, 0) / 7
+  const averagePercent = Math.round(
+    chartData.reduce((acc, curr) => acc + curr.percent, 0) / (chartData.length || 1)
   );
 
   return (
     <div className="space-y-6 pb-24">
-      {/* Title */}
-      <div>
-        <h2 className="text-xl font-extrabold font-display text-slate-900 dark:text-white flex items-center gap-2">
-          <BarChart3 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-          Progress & Analytics
-        </h2>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Comprehensive statistics, streak analysis and habit performance
-        </p>
+      {/* Title & Export Action Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-extrabold font-display text-slate-900 dark:text-white flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+            {getTranslation('progressAnalytics', language)}
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {getTranslation('analyticsSubtitle', language)}
+          </p>
+        </div>
+
+        {/* Export Buttons */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => exportHabitsToCSV(habits)}
+            className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5 text-emerald-600" />
+            <span>{getTranslation('exportCsv', language)}</span>
+          </button>
+
+          <button
+            onClick={() => exportHabitsToPDF(habits, userProfile)}
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-colors"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>{getTranslation('exportPdf', language)}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Timeframe selector tabs */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-1.5 border border-slate-100 dark:border-slate-800 flex items-center gap-1 w-fit">
+        <span className="text-xs font-bold text-slate-400 px-3">{getTranslation('timeframe', language)}:</span>
+        <button
+          onClick={() => setTimeframe('daily')}
+          className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+            timeframe === 'daily'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          {getTranslation('daily', language)} (7D)
+        </button>
+        <button
+          onClick={() => setTimeframe('weekly')}
+          className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+            timeframe === 'weekly'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          {getTranslation('weekly', language)} (14D)
+        </button>
+        <button
+          onClick={() => setTimeframe('monthly')}
+          className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+            timeframe === 'monthly'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          {getTranslation('monthly', language)} (30D)
+        </button>
       </div>
 
       {/* Hero Metric Cards */}
@@ -108,7 +169,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ habits }) => {
           <span className="text-2xl font-extrabold text-slate-900 dark:text-white block">
             {totalCompletions}
           </span>
-          <span className="text-[11px] font-medium text-slate-500">Total Habits Finished</span>
+          <span className="text-[11px] font-medium text-slate-500">{getTranslation('totalFinished', language)}</span>
         </div>
 
         <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
@@ -118,7 +179,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ habits }) => {
           <span className="text-2xl font-extrabold text-slate-900 dark:text-white block">
             {maxStreakAcrossHabits} Days
           </span>
-          <span className="text-[11px] font-medium text-slate-500">Best Streak Record</span>
+          <span className="text-[11px] font-medium text-slate-500">{getTranslation('bestStreak', language)}</span>
         </div>
 
         <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
@@ -126,9 +187,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ habits }) => {
             <TrendingUp className="w-4 h-4" />
           </div>
           <span className="text-2xl font-extrabold text-slate-900 dark:text-white block">
-            {averageWeeklyPercent}%
+            {averagePercent}%
           </span>
-          <span className="text-[11px] font-medium text-slate-500">7-Day Consistency</span>
+          <span className="text-[11px] font-medium text-slate-500">{getTranslation('consistency', language)}</span>
         </div>
 
         <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
@@ -138,21 +199,21 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ habits }) => {
           <span className="text-2xl font-extrabold text-slate-900 dark:text-white block">
             {activeHabits.length}
           </span>
-          <span className="text-[11px] font-medium text-slate-500">Active Routines</span>
+          <span className="text-[11px] font-medium text-slate-500">{getTranslation('activeRoutines', language)}</span>
         </div>
       </div>
 
-      {/* Weekly Completion Bar Chart */}
+      {/* Completion Bar Chart */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-100 dark:border-slate-800 shadow-sm space-y-3">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-          7-Day Habit Completion Count
+        <h3 className="text-sm font-bold text-slate-900 dark:text-white capitalize">
+          {timeframe} Habit Completion Count
         </h3>
 
         <div className="h-48 w-full pt-2">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={weeklyData}>
-              <XAxis dataKey="day" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
+            <BarChart data={chartData}>
+              <XAxis dataKey="day" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
+              <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
               <Tooltip
                 contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', border: 'none', color: '#fff' }}
               />
@@ -162,21 +223,21 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ habits }) => {
         </div>
       </div>
 
-      {/* 14-Day Consistency Trend Line */}
+      {/* Consistency Trend Line */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-100 dark:border-slate-800 shadow-sm space-y-3">
         <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-          14-Day Completion Rate (%) Trend
+          Completion Rate (%) Performance Trend
         </h3>
 
         <div className="h-48 w-full pt-2">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={trendData}>
-              <XAxis dataKey="date" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
+            <LineChart data={chartData}>
+              <XAxis dataKey="day" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
               <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} domain={[0, 100]} />
               <Tooltip
                 contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', border: 'none', color: '#fff' }}
               />
-              <Line type="monotone" dataKey="rate" stroke="#14b8a6" strokeWidth={3} dot={{ r: 4 }} />
+              <Line type="monotone" dataKey="percent" stroke="#14b8a6" strokeWidth={3} dot={{ r: 4 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>

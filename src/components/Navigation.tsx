@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile } from '../types';
 import { isFirebaseAvailable } from '../services/firebaseService';
+import { getTranslation, Language } from '../services/i18nService';
 import { 
   CalendarDays, 
   BarChart3, 
@@ -27,6 +28,7 @@ interface NavigationProps {
   onOpenAchievements: () => void;
   onOpenTelemetry: () => void;
   streakCount: number;
+  language?: Language;
 }
 
 export const Navigation: React.FC<NavigationProps> = ({
@@ -37,6 +39,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   onOpenAchievements,
   onOpenTelemetry,
   streakCount,
+  language = 'en',
 }) => {
   const [currentTime, setCurrentTime] = useState('');
 
@@ -97,11 +100,11 @@ export const Navigation: React.FC<NavigationProps> = ({
               My Habit Daily
             </h1>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium capitalize">
-              {activeTab === 'today' && "Today's Routine"}
-              {activeTab === 'habits' && 'Manage Habits'}
-              {activeTab === 'calendar' && 'Habit Calendar'}
-              {activeTab === 'analytics' && 'Progress Statistics'}
-              {activeTab === 'profile' && 'User Settings'}
+              {activeTab === 'today' && getTranslation('today', language)}
+              {activeTab === 'habits' && getTranslation('habits', language)}
+              {activeTab === 'calendar' && getTranslation('calendar', language)}
+              {activeTab === 'analytics' && getTranslation('analytics', language)}
+              {activeTab === 'profile' && getTranslation('profile', language)}
             </p>
           </div>
         </div>
@@ -114,7 +117,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             className="flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 rounded-full text-xs font-bold hover:scale-105 transition-transform"
           >
             <Sparkles className="w-3.5 h-3.5 fill-amber-500" />
-            <span>{streakCount} Day Streak</span>
+            <span>{streakCount} {getTranslation('streak', language)}</span>
           </button>
 
           {/* Theme switch */}
@@ -155,15 +158,16 @@ export const Navigation: React.FC<NavigationProps> = ({
 interface BottomNavProps {
   activeTab: NavTab;
   onTabChange: (tab: NavTab) => void;
+  language?: Language;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) => {
+export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange, language = 'en' }) => {
   const tabs = [
-    { id: 'today', label: 'Today', icon: CheckSquare },
-    { id: 'habits', label: 'Habits', icon: ListTodo },
-    { id: 'calendar', label: 'Calendar', icon: CalendarDays },
-    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-    { id: 'profile', label: 'Profile', icon: User },
+    { id: 'today', label: getTranslation('today', language), icon: CheckSquare },
+    { id: 'habits', label: getTranslation('habits', language), icon: ListTodo },
+    { id: 'calendar', label: getTranslation('calendar', language), icon: CalendarDays },
+    { id: 'analytics', label: getTranslation('analytics', language), icon: BarChart3 },
+    { id: 'profile', label: getTranslation('profile', language), icon: User },
   ] as const;
 
   return (

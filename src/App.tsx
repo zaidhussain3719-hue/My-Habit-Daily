@@ -12,15 +12,21 @@ import { AchievementsModal } from './components/AchievementsModal';
 import { AdMobBanner } from './components/AdMobBanner';
 import { TelemetryDrawer } from './components/TelemetryDrawer';
 import { AndroidFrame } from './components/AndroidFrame';
+import { HomeScreenWidget } from './components/HomeScreenWidget';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { StorageService, calculateHabitStreak } from './services/storageService';
 import { 
   subscribeNotifications, 
+  subscribeNotificationTap,
   triggerSmartReminder, 
   ToastNotification,
-  requestNotificationPermission 
+  requestNotificationPermission,
+  cancelScheduledNotificationsForHabit,
+  checkAndTriggerScheduledReminders,
+  getMotivationalMessageForHabit
 } from './services/notificationService';
 import { UserProfile, Habit, Achievement } from './types';
-import { BellRing, X } from 'lucide-react';
+import { BellRing, X, ChevronRight, Sparkles } from 'lucide-react';
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
@@ -37,8 +43,11 @@ export default function App() {
   const [isAchievementsOpen, setIsAchievementsOpen] = useState(false);
   const [isTelemetryOpen, setIsTelemetryOpen] = useState(false);
   const [isFrameActive, setIsFrameActive] = useState(false);
+  const [isWidgetModalOpen, setIsWidgetModalOpen] = useState(false);
 
   const [activeToast, setActiveToast] = useState<ToastNotification | null>(null);
+
+  const currentLanguage = userProfile.language || 'en';
 
   // Subscribe to smart reminder toast notifications
   useEffect(() => {
@@ -46,10 +55,36 @@ export default function App() {
       setActiveToast(notif);
       setTimeout(() => {
         setActiveToast(prev => (prev?.id === notif.id ? null : prev));
-      }, 5000);
+      }, 7000);
     });
     return unsubscribe;
   }, []);
+
+  // Handle tapping notification to open specific habit inside the app
+  useEffect(() => {
+    const unsubscribeTap = subscribeNotificationTap(habitId => {
+      setActiveTab('today');
+      if (habitId) {
+        const found = habits.find(h => h.id === habitId);
+        if (found) {
+          setEditingHabit(found);
+          setIsFormModalOpen(true);
+        }
+      }
+    });
+    return unsubscribeTap;
+  }, [habits]);
+
+  // Background Automatic Daily Notification Scheduler Engine
+  useEffect(() => {
+    checkAndTriggerScheduledReminders(habits, userProfile);
+
+    const interval = setInterval(() => {
+      checkAndTriggerScheduledReminders(habits, userProfile);
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [habits, userProfile]);
 
   // Sync theme with HTML root class
   useEffect(() => {
@@ -88,6 +123,7 @@ export default function App() {
         targetValue: habitData.targetValue || 1,
         unit: habitData.unit || 'times',
         reminderTime: habitData.reminderTime || '08:00',
+        reminderTimes: habitData.reminderTimes || ['08:00'],
         reminderEnabled: habitData.reminderEnabled ?? true,
         archived: false,
         createdAt: new Date().toISOString(),
@@ -107,19 +143,12 @@ export default function App() {
       const updated = habits.filter(h => h.id !== habitId);
       setHabits(updated);
       StorageService.saveHabits(updated);
+      cancelScheduledNotificationsForHabit(habitId);
     }
   };
 
   const handleToggleArchive = (habitId: string) => {
     const updated = habits.map(h => (h.id === habitId ? { ...h, archived: !h.archived } : h));
-    setHabits(updated);
-    StorageService.saveHabits(updated);
-  };
-
-  const handleToggleReminder = (habitId: string) => {
-    const updated = habits.map(h =>
-      h.id === habitId ? { ...h, reminderEnabled: !h.reminderEnabled } : h
-    );
     setHabits(updated);
     StorageService.saveHabits(updated);
   };
@@ -137,11 +166,17 @@ export default function App() {
   const handleTriggerTestReminder = () => {
     requestNotificationPermission();
     const activeHabit = habits.find(h => !h.archived);
-    const title = activeHabit ? `Reminder: ${activeHabit.title}` : 'My Habit Daily Reminder';
-    const body = activeHabit
-      ? `Time for your daily routine: ${activeHabit.targetValue} ${activeHabit.unit}`
-      : 'Stay consistent! Log your daily habits now.';
-    triggerSmartReminder(title, body);
+    if (activeHabit) {
+      const body = getMotivationalMessageForHabit(activeHabit.title);
+      triggerSmartReminder(`Reminder: ${activeHabit.title}`, body, activeHabit.id, 'daily_reminders');
+    } else {
+      triggerSmartReminder(
+        'My Habit Daily Reminder', 
+        'Stay consistent! Create your first habit and start crushing your goals.',
+        undefined,
+        'motivation'
+      );
+    }
   };
 
   // If splash screen is active
@@ -166,141 +201,191 @@ export default function App() {
   }
 
   return (
-    <AndroidFrame isActive={isFrameActive}>
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors">
-        {/* Navigation Header */}
-        <Navigation
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          userProfile={userProfile}
-          onToggleTheme={handleToggleTheme}
-          onOpenAchievements={() => setIsAchievementsOpen(true)}
-          onOpenTelemetry={() => setIsTelemetryOpen(true)}
-          streakCount={streakCount}
-        />
+    <ErrorBoundary>
+      <AndroidFrame isActive={isFrameActive}>
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors">
+          {/* Navigation Header */}
+          <Navigation
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            userProfile={userProfile}
+            onToggleTheme={handleToggleTheme}
+            onOpenAchievements={() => setIsAchievementsOpen(true)}
+            onOpenTelemetry={() => setIsTelemetryOpen(true)}
+            streakCount={streakCount}
+            language={currentLanguage}
+          />
 
-        {/* Smart Reminder Toast Notification Banner */}
-        {activeToast && (
-          <div className="sticky top-16 z-50 mx-4 my-2 p-3 bg-emerald-900 text-white rounded-2xl shadow-xl flex items-center justify-between animate-bounce">
-            <div className="flex items-center gap-2.5">
-              <BellRing className="w-5 h-5 text-emerald-400" />
-              <div>
-                <h4 className="text-xs font-bold">{activeToast.title}</h4>
-                <p className="text-[11px] text-emerald-200">{activeToast.body}</p>
+          {/* Material 3 Smart Reminder Push Notification Banner */}
+          {activeToast && (
+            <div className="sticky top-16 z-50 mx-4 my-2 p-4 bg-slate-900/95 dark:bg-slate-900/95 text-white rounded-3xl border border-emerald-500/30 shadow-2xl backdrop-blur-md transition-all animate-in fade-in slide-in-from-top duration-300">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="p-2.5 bg-emerald-600/30 text-emerald-400 rounded-2xl shrink-0 mt-0.5">
+                    <BellRing className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        {activeToast.channelName || 'Daily Habit Reminder'}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono">{activeToast.timestamp}</span>
+                    </div>
+                    <h4 className="text-sm font-bold text-white font-display">{activeToast.title}</h4>
+                    <p className="text-xs text-slate-300 leading-snug">{activeToast.body}</p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setActiveToast(null)}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Action Bar */}
+              <div className="mt-3 pt-2.5 border-t border-slate-800 flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    const habitId = activeToast.habitId;
+                    setActiveToast(null);
+                    if (habitId) {
+                      const found = habits.find(h => h.id === habitId);
+                      if (found) {
+                        setEditingHabit(found);
+                        setIsFormModalOpen(true);
+                      }
+                    } else {
+                      setActiveTab('today');
+                    }
+                  }}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
+                >
+                  <span>Open Habit</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
-            <button
-              onClick={() => setActiveToast(null)}
-              className="p-1 text-emerald-300 hover:text-white"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
+          )}
 
-        {/* Main View Area */}
-        <main className="flex-1 max-w-7xl w-full mx-auto px-4 pt-4">
-          {activeTab === 'today' && (
-            <TodayView
-              habits={habits}
-              selectedDate={selectedDate}
-              onSelectDate={setSelectedDate}
-              onUpdateLog={handleUpdateLog}
-              onOpenCreateModal={() => {
-                setEditingHabit(null);
-                setIsFormModalOpen(true);
+          {/* Main View Area */}
+          <main className="flex-1 max-w-7xl w-full mx-auto px-4 pt-4">
+            {activeTab === 'today' && (
+              <TodayView
+                habits={habits}
+                selectedDate={selectedDate}
+                onSelectDate={setSelectedDate}
+                onUpdateLog={handleUpdateLog}
+                onOpenCreateModal={() => {
+                  setEditingHabit(null);
+                  setIsFormModalOpen(true);
+                }}
+                onEditHabit={habit => {
+                  setEditingHabit(habit);
+                  setIsFormModalOpen(true);
+                }}
+                onDeleteHabit={handleDeleteHabit}
+                onTriggerTestReminder={handleTriggerTestReminder}
+                onOpenWidgetModal={() => setIsWidgetModalOpen(true)}
+                language={currentLanguage}
+              />
+            )}
+
+            {activeTab === 'habits' && (
+              <HabitsView
+                habits={habits}
+                onOpenCreateModal={() => {
+                  setEditingHabit(null);
+                  setIsFormModalOpen(true);
+                }}
+                onEditHabit={habit => {
+                  setEditingHabit(habit);
+                  setIsFormModalOpen(true);
+                }}
+                onDeleteHabit={handleDeleteHabit}
+                onToggleArchive={handleToggleArchive}
+              />
+            )}
+
+            {activeTab === 'calendar' && (
+              <CalendarView habits={habits} onUpdateLog={handleUpdateLog} />
+            )}
+
+            {activeTab === 'analytics' && (
+              <AnalyticsView habits={habits} userProfile={userProfile} language={currentLanguage} />
+            )}
+
+            {activeTab === 'profile' && (
+              <ProfileView
+                userProfile={userProfile}
+                habits={habits}
+                onUpdateProfile={handleUpdateProfile}
+                onOpenAchievements={() => setIsAchievementsOpen(true)}
+                onSignOut={() => {
+                  setIsLoggedIn(false);
+                  setUserProfile({ ...userProfile, uid: '' });
+                }}
+                onImportHabits={imported => {
+                  setHabits(imported);
+                  StorageService.saveHabits(imported);
+                }}
+                onToggleAdMob={() => {
+                  handleUpdateProfile({
+                    ...userProfile,
+                    adMobEnabled: !userProfile.adMobEnabled,
+                  });
+                }}
+                onToggleFrame={() => setIsFrameActive(!isFrameActive)}
+                isFrameActive={isFrameActive}
+                language={currentLanguage}
+              />
+            )}
+          </main>
+
+          {/* Google AdMob Test Banner */}
+          {userProfile.adMobEnabled && (
+            <AdMobBanner
+              onClose={() => {
+                handleUpdateProfile({ ...userProfile, adMobEnabled: false });
               }}
-              onEditHabit={habit => {
-                setEditingHabit(habit);
-                setIsFormModalOpen(true);
-              }}
-              onDeleteHabit={handleDeleteHabit}
-              onTriggerTestReminder={handleTriggerTestReminder}
             />
           )}
 
-          {activeTab === 'habits' && (
-            <HabitsView
-              habits={habits}
-              onOpenCreateModal={() => {
-                setEditingHabit(null);
-                setIsFormModalOpen(true);
-              }}
-              onEditHabit={habit => {
-                setEditingHabit(habit);
-                setIsFormModalOpen(true);
-              }}
-              onDeleteHabit={handleDeleteHabit}
-              onToggleArchive={handleToggleArchive}
-            />
-          )}
+          {/* Bottom Navigation */}
+          <BottomNav activeTab={activeTab} onTabChange={setActiveTab} language={currentLanguage} />
 
-          {activeTab === 'calendar' && (
-            <CalendarView habits={habits} onUpdateLog={handleUpdateLog} />
-          )}
-
-          {activeTab === 'analytics' && <AnalyticsView habits={habits} />}
-
-          {activeTab === 'profile' && (
-            <ProfileView
-              userProfile={userProfile}
-              habits={habits}
-              onUpdateProfile={handleUpdateProfile}
-              onOpenAchievements={() => setIsAchievementsOpen(true)}
-              onSignOut={() => {
-                setIsLoggedIn(false);
-                setUserProfile({ ...userProfile, uid: '' });
-              }}
-              onImportHabits={imported => {
-                setHabits(imported);
-                StorageService.saveHabits(imported);
-              }}
-              onToggleAdMob={() => {
-                handleUpdateProfile({
-                  ...userProfile,
-                  adMobEnabled: !userProfile.adMobEnabled,
-                });
-              }}
-              onToggleFrame={() => setIsFrameActive(!isFrameActive)}
-              isFrameActive={isFrameActive}
-            />
-          )}
-        </main>
-
-        {/* Google AdMob Test Banner */}
-        {userProfile.adMobEnabled && (
-          <AdMobBanner
+          {/* Modals & Drawers */}
+          <HabitFormModal
+            isOpen={isFormModalOpen}
             onClose={() => {
-              handleUpdateProfile({ ...userProfile, adMobEnabled: false });
+              setIsFormModalOpen(false);
+              setEditingHabit(null);
             }}
+            onSave={handleSaveHabit}
+            initialHabit={editingHabit}
           />
-        )}
 
-        {/* Bottom Navigation */}
-        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+          <AchievementsModal
+            isOpen={isAchievementsOpen}
+            onClose={() => setIsAchievementsOpen(false)}
+            achievements={achievements}
+          />
 
-        {/* Modals & Drawers */}
-        <HabitFormModal
-          isOpen={isFormModalOpen}
-          onClose={() => {
-            setIsFormModalOpen(false);
-            setEditingHabit(null);
-          }}
-          onSave={handleSaveHabit}
-          initialHabit={editingHabit}
-        />
+          <TelemetryDrawer
+            isOpen={isTelemetryOpen}
+            onClose={() => setIsTelemetryOpen(false)}
+          />
 
-        <AchievementsModal
-          isOpen={isAchievementsOpen}
-          onClose={() => setIsAchievementsOpen(false)}
-          achievements={achievements}
-        />
-
-        <TelemetryDrawer
-          isOpen={isTelemetryOpen}
-          onClose={() => setIsTelemetryOpen(false)}
-        />
-      </div>
-    </AndroidFrame>
+          <HomeScreenWidget
+            isOpen={isWidgetModalOpen}
+            onClose={() => setIsWidgetModalOpen(false)}
+            habits={habits}
+            onUpdateLog={handleUpdateLog}
+            language={currentLanguage}
+          />
+        </div>
+      </AndroidFrame>
+    </ErrorBoundary>
   );
 }
