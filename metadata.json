@@ -1,0 +1,6 @@
+{
+  "name": "My Habit Daily",
+  "description": "A premium Material 3 green & white habit tracker Android application with streak tracking, cloud sync, analytics, calendar, and smart reminders.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
