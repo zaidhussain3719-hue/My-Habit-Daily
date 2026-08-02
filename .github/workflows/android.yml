@@ -35,29 +35,26 @@ jobs:
       - name: Build Web Application
         run: npm run build
 
-      - name: Sync Capacitor (if available)
+      - name: Copy Web Build to Android Assets
         run: |
-          if npx cap --version > /dev/null 2>&1; then
-            npx cap sync android || echo "Capacitor sync skipped or failed"
-          fi
+          mkdir -p android/app/src/main/assets
+          mkdir -p app/src/main/assets
+          cp -r dist/* android/app/src/main/assets/ || true
+          cp -r dist/* app/src/main/assets/ || true
 
       - name: Grant Execute Permission for Gradle Wrapper
         run: |
-          if [ -f "android/gradlew" ]; then
-            chmod +x android/gradlew
-          elif [ -f "gradlew" ]; then
-            chmod +x gradlew
-          fi
+          chmod +x gradlew || true
+          chmod +x android/gradlew || true
 
       - name: Build Debug APK
         run: |
-          if [ -f "android/gradlew" ]; then
-            cd android && ./gradlew assembleDebug --stacktrace
-          elif [ -f "gradlew" ]; then
+          if [ -f "gradlew" ]; then
             ./gradlew assembleDebug --stacktrace
+          elif [ -f "android/gradlew" ]; then
+            cd android && ./gradlew assembleDebug --stacktrace
           else
-            echo "Gradle wrapper not found directly, checking for gradle installed in runner"
-            gradle assembleDebug || echo "Skipping standalone gradle if not configured"
+            gradle assembleDebug --stacktrace
           fi
 
       - name: Upload Debug APK Artifact
