@@ -1,5 +1,5 @@
 <resources>
-    <style name="Theme.MyHabitDaily" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.MyHabitDaily" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">#10b981</item>
         <item name="android:statusBarColor">#064e3b</item>
     </style>
