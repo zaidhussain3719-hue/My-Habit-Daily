@@ -21,31 +21,35 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: 'gradle'
 
-      - name: Set up Node.js
+      - name: Set up Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-          
+          node-version: '24'
+
       - name: Install Node Dependencies
-        run: npm ci || npm install
+        run: npm install
 
       - name: Build Web Application
         run: npm run build
 
       - name: Copy Web Build to Android Assets
         run: |
-          mkdir -p android/app/src/main/assets
           mkdir -p app/src/main/assets
-          cp -r dist/* android/app/src/main/assets/ || true
+          mkdir -p android/app/src/main/assets
           cp -r dist/* app/src/main/assets/ || true
+          cp -r dist/* android/app/src/main/assets/ || true
 
-      - name: Grant Execute Permission for Gradle Wrapper
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Generate Wrapper JAR & Grant Permissions
         run: |
-          chmod +x gradlew || true
-          chmod +x android/gradlew || true
+          gradle wrapper --gradle-version 8.2
+          chmod +x gradlew
+          if [ -d "android" ]; then
+            (cd android && gradle wrapper --gradle-version 8.2 && chmod +x gradlew) || true
+          fi
 
       - name: Build Debug APK
         run: |
@@ -62,7 +66,7 @@ jobs:
         with:
           name: debug-apk
           path: |
-            android/app/build/outputs/apk/debug/*.apk
             app/build/outputs/apk/debug/*.apk
+            android/app/build/outputs/apk/debug/*.apk
             **/*.apk
-          if-no-files-found: warn
+          if-no-files-found: error
