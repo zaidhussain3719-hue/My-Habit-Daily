@@ -20,6 +20,7 @@ import {
   getDocFromServer
 } from 'firebase/firestore';
 import { AnalyticsEvent } from '../types';
+import firebaseAppletConfig from '../../firebase-applet-config.json';
 
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
@@ -46,14 +47,51 @@ export function getTelemetryLogs(): AnalyticsEvent[] {
   return [...telemetryLogs];
 }
 
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+  };
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth?.currentUser?.uid,
+      email: auth?.currentUser?.email,
+      emailVerified: auth?.currentUser?.emailVerified,
+      isAnonymous: auth?.currentUser?.isAnonymous,
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  logTelemetryEvent('firestore_error', { errInfo }, 'firestore');
+  throw new Error(JSON.stringify(errInfo));
+}
+
 // Attempt to initialize Firebase dynamically if config exists
 try {
-  // Check if firebase-applet-config.json exists or window fallback
-  const config = (window as any).__FIREBASE_CONFIG__;
+  const config = (window as any).__FIREBASE_CONFIG__ || firebaseAppletConfig;
   if (config && config.apiKey) {
     app = getApps().length === 0 ? initializeApp(config) : getApp();
     auth = getAuth(app);
-    db = getFirestore(app, config.firestoreDatabaseId);
+    db = config.firestoreDatabaseId ? getFirestore(app, config.firestoreDatabaseId) : getFirestore(app);
     isFirebaseAvailable = true;
     logTelemetryEvent('app_open', { platform: 'Android (Material 3)' }, 'analytics');
   } else {

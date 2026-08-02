@@ -1,0 +1,43 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "dailyTargetPercent": { "type": "number" },
+        "themeMode": { "type": "string" },
+        "language": { "type": "string" },
+        "isGuest": { "type": "boolean" },
+        "joinedAt": { "type": "string" },
+        "soundEnabled": { "type": "boolean" },
+        "notificationsEnabled": { "type": "boolean" },
+        "adMobEnabled": { "type": "boolean" }
+      },
+      "required": ["uid", "email"]
+    },
+    "UserHabits": {
+      "title": "User Habits List",
+      "description": "Habits collection for a user",
+      "type": "object",
+      "properties": {
+        "habits": { "type": "array" },
+        "updatedAt": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile document"
+    },
+    "/user_habits/{userId}": {
+      "schema": "UserHabits",
+      "description": "Habit list document for a user"
+    }
+  }
+}

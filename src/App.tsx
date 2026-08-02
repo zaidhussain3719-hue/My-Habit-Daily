@@ -15,6 +15,8 @@ import { AndroidFrame } from './components/AndroidFrame';
 import { HomeScreenWidget } from './components/HomeScreenWidget';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { StorageService, calculateHabitStreak } from './services/storageService';
+import { auth, isFirebaseAvailable, logTelemetryEvent } from './services/firebaseService';
+import { onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
 import { 
   subscribeNotifications, 
   subscribeNotificationTap,
@@ -48,6 +50,46 @@ export default function App() {
   const [activeToast, setActiveToast] = useState<ToastNotification | null>(null);
 
   const currentLanguage = userProfile.language || 'en';
+
+  // Listen to Firebase Auth state changes
+  useEffect(() => {
+    if (isFirebaseAvailable && auth) {
+      const unsubscribe = onAuthStateChanged(auth, firebaseUser => {
+        if (firebaseUser) {
+          setIsLoggedIn(true);
+          const currentProfile = StorageService.getProfile();
+          const updatedProfile: UserProfile = {
+            ...currentProfile,
+            uid: firebaseUser.uid,
+            email: firebaseUser.email || currentProfile.email,
+            name: firebaseUser.displayName || currentProfile.name || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'User'),
+            photoUrl: firebaseUser.photoURL || currentProfile.photoUrl,
+            isGuest: false,
+          };
+          setUserProfile(updatedProfile);
+          StorageService.saveProfile(updatedProfile);
+          logTelemetryEvent('firebase_auth_state_changed', { uid: firebaseUser.uid, email: firebaseUser.email });
+        }
+      });
+      return unsubscribe;
+    }
+  }, []);
+
+  // Listen to Firestore real-time updates for habits and profile
+  useEffect(() => {
+    if (isLoggedIn && userProfile.uid && !userProfile.isGuest) {
+      const unsubHabits = StorageService.subscribeHabitsSync(userProfile.uid, fetchedHabits => {
+        setHabits(fetchedHabits);
+      });
+      const unsubProfile = StorageService.subscribeProfileSync(userProfile.uid, fetchedProfile => {
+        setUserProfile(fetchedProfile);
+      });
+      return () => {
+        unsubHabits();
+        unsubProfile();
+      };
+    }
+  }, [isLoggedIn, userProfile.uid, userProfile.isGuest]);
 
   // Subscribe to smart reminder toast notifications
   useEffect(() => {
@@ -322,9 +364,17 @@ export default function App() {
                 habits={habits}
                 onUpdateProfile={handleUpdateProfile}
                 onOpenAchievements={() => setIsAchievementsOpen(true)}
-                onSignOut={() => {
+                onSignOut={async () => {
+                  if (isFirebaseAvailable && auth) {
+                    try {
+                      await firebaseSignOut(auth);
+                      logTelemetryEvent('firebase_sign_out_success');
+                    } catch (err) {
+                      console.warn('Firebase sign out error', err);
+                    }
+                  }
                   setIsLoggedIn(false);
-                  setUserProfile({ ...userProfile, uid: '' });
+                  setUserProfile({ ...userProfile, uid: '', isGuest: true });
                 }}
                 onImportHabits={imported => {
                   setHabits(imported);

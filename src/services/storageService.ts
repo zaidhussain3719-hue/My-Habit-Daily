@@ -81,6 +81,25 @@ export class StorageService {
     }
   }
 
+  static subscribeProfileSync(userId: string, callback: (profile: UserProfile) => void): () => void {
+    if (isFirebaseAvailable && db && userId) {
+      const userRef = doc(db, 'users', userId);
+      return onSnapshot(userRef, snapshot => {
+        if (snapshot.exists()) {
+          const data = snapshot.data() as UserProfile;
+          if (data) {
+            localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(data));
+            callback(data);
+            logTelemetryEvent('firestore_profile_synced', { name: data.name }, 'firestore');
+          }
+        }
+      }, err => {
+        logTelemetryEvent('firestore_profile_snapshot_error', { err: String(err) }, 'firestore');
+      });
+    }
+    return () => {};
+  }
+
   static getHabits(): Habit[] {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.HABITS);
@@ -100,6 +119,25 @@ export class StorageService {
         logTelemetryEvent('firestore_habits_sync_error', { err: String(err) }, 'firestore');
       });
     }
+  }
+
+  static subscribeHabitsSync(userId: string, callback: (habits: Habit[]) => void): () => void {
+    if (isFirebaseAvailable && db && userId) {
+      const habitsRef = doc(db, 'user_habits', userId);
+      return onSnapshot(habitsRef, snapshot => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (data && Array.isArray(data.habits)) {
+            localStorage.setItem(STORAGE_KEYS.HABITS, JSON.stringify(data.habits));
+            callback(data.habits);
+            logTelemetryEvent('firestore_habits_synced', { count: data.habits.length }, 'firestore');
+          }
+        }
+      }, err => {
+        logTelemetryEvent('firestore_habits_snapshot_error', { err: String(err) }, 'firestore');
+      });
+    }
+    return () => {};
   }
 
   static getAchievements(): Achievement[] {
