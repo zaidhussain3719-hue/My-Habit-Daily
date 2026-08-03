@@ -5,6 +5,7 @@ import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswor
 import { DEFAULT_LOGO } from '../data/initialData';
 import { Mail, Lock, User, ArrowRight, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
 import { UserProfile } from '../types';
+import { StorageService } from '../services/storageService';
 
 interface AuthScreenProps {
   onLoginSuccess: (userProfile: UserProfile) => void;
@@ -39,7 +40,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onContin
         if (isSignUp) {
           const cred = await createUserWithEmailAndPassword(auth, email, password);
           logTelemetryEvent('auth_signup_success', { email: cred.user.email });
-          onLoginSuccess({
+          const userProfileData: UserProfile = {
             uid: cred.user.uid,
             name: fullName || email.split('@')[0],
             email: cred.user.email || email,
@@ -51,13 +52,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onContin
             soundEnabled: true,
             notificationsEnabled: true,
             adMobEnabled: true,
-          });
+          };
+          StorageService.saveProfile(userProfileData);
+          onLoginSuccess(userProfileData);
         } else {
           const cred = await signInWithEmailAndPassword(auth, email, password);
           logTelemetryEvent('auth_login_success', { email: cred.user.email });
-          onLoginSuccess({
+          const userProfileData: UserProfile = {
             uid: cred.user.uid,
-            name: cred.user.displayName || email.split('@')[0],
+            name: cred.user.displayName || fullName || email.split('@')[0],
             email: cred.user.email || email,
             photoUrl: cred.user.photoURL || '/src/assets/images/user_profile_avatar_1785647019010.jpg',
             dailyTargetPercent: 80,
@@ -67,7 +70,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onContin
             soundEnabled: true,
             notificationsEnabled: true,
             adMobEnabled: true,
-          });
+          };
+          onLoginSuccess(userProfileData);
         }
       } else {
         // Fallback local demo auth mode if Firebase project is not provisioned yet
@@ -90,8 +94,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onContin
       }
     } catch (err: any) {
       console.error('Auth error', err);
-      setErrorMessage(err.message || 'Authentication failed. Please check credentials.');
-      logTelemetryEvent('auth_error', { message: err.message }, 'crashlytics');
+      const code = err?.code || '';
+      const msg = err?.message || '';
+      if (code === 'auth/email-already-in-use' || msg.includes('email-already-in-use') || msg.includes('auth/email-already-in-use')) {
+        setErrorMessage('Account already exists. Please sign in.');
+      } else if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found' || msg.includes('invalid-credential')) {
+        setErrorMessage('Invalid email or password. Please try again.');
+      } else {
+        setErrorMessage(msg || 'Authentication failed. Please check your credentials.');
+      }
+      logTelemetryEvent('auth_error', { message: msg, code }, 'crashlytics');
     } finally {
       setLoading(false);
     }

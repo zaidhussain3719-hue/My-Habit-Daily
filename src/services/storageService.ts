@@ -92,6 +92,17 @@ export class StorageService {
             callback(data);
             logTelemetryEvent('firestore_profile_synced', { name: data.name }, 'firestore');
           }
+        } else {
+          const fallbackProf: UserProfile = {
+            ...DEFAULT_USER,
+            uid: userId,
+            email: auth?.currentUser?.email || DEFAULT_USER.email,
+            name: auth?.currentUser?.displayName || auth?.currentUser?.email?.split('@')[0] || DEFAULT_USER.name,
+            isGuest: false,
+          };
+          setDoc(userRef, fallbackProf, { merge: true }).catch(console.error);
+          localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(fallbackProf));
+          callback(fallbackProf);
         }
       }, err => {
         logTelemetryEvent('firestore_profile_snapshot_error', { err: String(err) }, 'firestore');
@@ -132,6 +143,12 @@ export class StorageService {
             callback(data.habits);
             logTelemetryEvent('firestore_habits_synced', { count: data.habits.length }, 'firestore');
           }
+        } else {
+          const initial = INITIAL_HABITS;
+          setDoc(habitsRef, { habits: initial, updatedAt: new Date().toISOString() }, { merge: true }).catch(console.error);
+          localStorage.setItem(STORAGE_KEYS.HABITS, JSON.stringify(initial));
+          callback(initial);
+          logTelemetryEvent('firestore_habits_seeded', { count: initial.length }, 'firestore');
         }
       }, err => {
         logTelemetryEvent('firestore_habits_snapshot_error', { err: String(err) }, 'firestore');
